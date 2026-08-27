@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#1d4ed8" />
+  <meta name="description" content="Offline-first punctuality tracking PWA" />
+  <!-- Relative paths so the PWA works on GitHub Pages subpaths -->
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icons/icon-192.svg" />
+  <title>Punctuality Tracker</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
+  <!-- jsQR fallback so iOS Safari can scan QR codes too -->
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="./config.js"></script>
+</head>
+<body>
+  <div id="authView" class="auth-wrap">
+    <div class="card auth-card">
+      <h1>Punctuality Tracker</h1>
+      <p class="small">Install this on employee phones. They scan the work QR code when arriving and leaving. The app saves offline scans and syncs them automatically once connectivity returns.</p>
+      <div class="row" style="margin-bottom:12px;">
+        <button id="tabLoginBtn">Login</button>
+        <button id="tabRegisterBtn" class="secondary">Create account</button>
+      </div>
+      <form id="loginForm" class="form-grid">
+        <input id="loginEmail" type="email" placeholder="Email address" required />
+        <input id="loginPassword" type="password" placeholder="Password" required />
+        <button type="submit">Login</button>
+      </form>
+      <form id="registerForm" class="form-grid hidden" style="margin-top: 8px;">
+        <input id="registerName" type="text" placeholder="Full name" required />
+        <input id="registerEmail" type="email" placeholder="Email address" required />
+        <input id="registerPassword" type="password" placeholder="Password" required />
+        <button type="submit">Create employee account</button>
+      </form>
+      <p id="authStatus" class="footer-note" style="margin-bottom:0;"></p>
+    </div>
+  </div>
+
+  <div id="appView" class="app-shell hidden">
+    <div class="topbar">
+      <div class="brand">
+        <strong>Punctuality Tracker</strong>
+        <span id="userMeta">Signed in</span>
+      </div>
+      <div class="row">
+        <span class="pill"><span id="networkDot" class="dot"></span><span id="networkLabel">Online</span></span>
+        <span class="pill"><span class="dot" id="syncDot"></span><span id="syncLabel">No pending sync</span></span>
+        <button id="signOutBtn" class="ghost">Sign out</button>
+      </div>
+    </div>
+
+    <main class="container">
+      <section id="employeeSection" class="grid two hidden">
+        <div class="card">
+          <h2>Scan attendance</h2>
+          <p class="small">Tap arrive or leave, then point the camera at the work QR code.</p>
+          <div class="row">
+            <button data-action="arrive" class="scanTrigger">Arrive</button>
+            <button data-action="leave" class="secondary scanTrigger">Leave</button>
+            <button id="syncNowBtn" class="ghost">Sync pending scans</button>
+          </div>
+          <div class="scanner" style="margin-top:14px;">
+            <video id="scannerVideo" playsinline muted></video>
+            <div class="scan-overlay"></div>
+          </div>
+          <p id="scanStatus" class="footer-note">Scanner idle.</p>
+          <div class="row">
+            <button id="stopScanBtn" class="ghost hidden">Stop scanner</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>My attendance history</h2>
+          <div style="overflow:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Action</th>
+                  <th>Scanned time</th>
+                  <th>Sync</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="employeeAttendanceBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="adminSection" class="grid hidden">
+        <div class="grid two">
+          <div class="card">
+            <h2>Current attendance QR</h2>
+            <div class="qr-box">
+              <canvas id="qrCanvas"></canvas>
+              <div class="code" id="currentQrText">No QR generated yet.</div>
+              <div class="row">
+                <button id="regenerateQrBtn">Regenerate QR</button>
+                <button id="copyQrBtn" class="ghost">Copy code</button>
+              </div>
+              <p id="qrMeta" class="small">Generate your first QR code after setting up the admin account.</p>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>Punctuality overview</h2>
+            <div class="row" style="margin-bottom:12px;">
+              <input type="date" id="dateFilter" />
+              <button id="exportCsvBtn" class="ghost">Export CSV</button>
+            </div>
+            <div class="kpis">
+              <div class="kpi"><div class="label">On time</div><div id="kpiOnTime" class="value">0</div></div>
+              <div class="kpi"><div class="label">Late</div><div id="kpiLate" class="value">0</div></div>
+              <div class="kpi"><div class="label">Absent</div><div id="kpiAbsent" class="value">0</div></div>
+              <div class="kpi"><div class="label">Arrivals</div><div id="kpiArrivals" class="value">0</div></div>
+              <div class="kpi"><div class="label">Departures</div><div id="kpiDepartures" class="value">0</div></div>
+              <div class="kpi"><div class="label">Offline syncs</div><div id="kpiOffline" class="value">0</div></div>
+            </div>
+            <p class="footer-note">Shift starts <span id="shiftInfo">at 09:00</span>. Only active employees are counted. Employees only ever see their own data.</p>
+          </div>
+        </div>
+
+        <div class="grid two">
+          <div class="card">
+            <h2>Daily punctuality <span class="small" id="summaryDateLabel"></span></h2>
+            <div style="overflow:auto;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Employee</th>
+                    <th>Arrive</th>
+                    <th>Leave</th>
+                    <th>Status</th>
+                    <th>Hours</th>
+                    <th>Late</th>
+                  </tr>
+                </thead>
+                <tbody id="dailySummaryBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>Employees</h2>
+            <div style="overflow:auto;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Status today</th>
+                    <th>Active</th>
+                  </tr>
+                </thead>
+                <tbody id="rosterBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>All attendance history</h2>
+          <div style="overflow:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Employee</th>
+                  <th>Action</th>
+                  <th>Scanned time</th>
+                  <th>Received</th>
+                  <th>Offline</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="adminAttendanceBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
