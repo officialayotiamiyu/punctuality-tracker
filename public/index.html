@@ -164,7 +164,16 @@
 
         <div class="card">
           <h2>All attendance history</h2>
-          <div style="overflow:auto;">
+          <div class="row" style="margin-bottom:12px; align-items:center; flex-wrap:wrap; gap:8px;">
+            <label class="small" for="rangeStart">From</label>
+            <input type="date" id="rangeStart" />
+            <label class="small" for="rangeEnd">To</label>
+            <input type="date" id="rangeEnd" />
+            <button id="exportRangeCsvBtn" class="ghost">Export CSV (range)</button>
+            <span class="small" id="rangeExportStatus"></span>
+        </div>
+        <p class="footer-note">Exports every scan in the selected range (not just the loaded table below), fetched directly from Supabase. Deleting old rows to free up database space is done separately from the Supabase dashboard (Table editor or SQL editor) — export first if you need a record of them.</p>
+        <div style="overflow:auto;">
             <table>
               <thead>
                 <tr>
