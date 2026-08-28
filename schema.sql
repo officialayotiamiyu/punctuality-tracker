@@ -174,7 +174,7 @@ create or replace function public.regenerate_qr()
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_uid uuid := auth.uid();
