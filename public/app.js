@@ -214,24 +214,12 @@ async function loadProfile(user) {
 
   if (profile) return profile;
 
-  if (!error) {
-    const name = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Employee';
-    const { data: created, error: insertError } = await supabase
-      .from('profiles')
-      .upsert({
-        id: user.id,
-        name,
-        email: user.email,
-        role: 'employee',
-        active: true,
-      })
-      .select()
-      .single();
-    if (!insertError && created) return created;
-    console.error('Profile fallback insert failed', insertError);
-    return null;
-  }
-
+  // No client-side fallback upsert here on purpose: the DB trigger
+  // (handle_new_user) is solely responsible for creating the profile row
+  // on signup. A client-side upsert used to run here whenever the SELECT
+  // above returned null for any reason (timing, transient error, etc.),
+  // and since it hardcoded role: 'employee', it would silently overwrite
+  // an existing admin's row back to 'employee' any time that happened.
   console.error('Could not load profile', error);
   return null;
 }
