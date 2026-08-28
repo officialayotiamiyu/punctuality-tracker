@@ -1,7 +1,7 @@
 // Service worker — uses RELATIVE paths so it works on GitHub Pages
 // under https://<user>.github.io/<repo>/ subpaths as well as at the root.
 // Bump CACHE_NAME whenever you change the frontend so phones download the new version.
-const CACHE_NAME = 'attendance-pwa-v4';
+const CACHE_NAME = 'attendance-pwa-v5';
 const APP_SHELL = [
   './',
   './index.html',
