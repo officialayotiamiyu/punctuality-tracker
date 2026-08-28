@@ -61,6 +61,10 @@ const shiftInfo = document.getElementById('shiftInfo');
 const dateFilter = document.getElementById('dateFilter');
 const summaryDateLabel = document.getElementById('summaryDateLabel');
 const exportCsvBtn = document.getElementById('exportCsvBtn');
+const rangeStartInput = document.getElementById('rangeStart');
+const rangeEndInput = document.getElementById('rangeEnd');
+const exportRangeCsvBtn = document.getElementById('exportRangeCsvBtn');
+const rangeExportStatus = document.getElementById('rangeExportStatus');
 const dailySummaryBody = document.getElementById('dailySummaryBody');
 const rosterBody = document.getElementById('rosterBody');
 const toast = document.getElementById('toast');
@@ -96,6 +100,10 @@ function toLocalDateStr(d) {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
+}
+
+function firstDayOfMonthStr(d = new Date()) {
+  return toLocalDateStr(new Date(d.getFullYear(), d.getMonth(), 1));
 }
 
 function formatDateTime(value) {
@@ -410,6 +418,88 @@ function exportDailyCsv() {
   a.click();
   URL.revokeObjectURL(a.href);
   showToast('CSV downloaded.', 'success');
+}
+
+// --- Date-range history export --------------------------------------------
+// Pulls directly from Supabase (paginated past PostgREST's 1000-row default),
+// independent of the 5000-row cap used for the live admin table. Use this for
+// month-end pulls; use the Supabase dashboard separately to delete old rows.
+
+async function fetchAttendanceRange(startDateStr, endDateStr) {
+  const startIso = new Date(`${startDateStr}T00:00:00`).toISOString();
+  const endIso = new Date(`${endDateStr}T23:59:59.999`).toISOString();
+
+  const pageSize = 1000;
+  let from = 0;
+  const all = [];
+  for (;;) {
+    const { data, error } = await supabase
+      .from('attendance')
+      .select('*')
+      .gte('local_scanned_at', startIso)
+      .lte('local_scanned_at', endIso)
+      .order('local_scanned_at', { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    all.push(...(data || []));
+    if (!data || data.length < pageSize) break;
+    from += pageSize;
+  }
+  return all;
+}
+
+async function exportAttendanceRangeCsv() {
+  const startDateStr = rangeStartInput.value;
+  const endDateStr = rangeEndInput.value;
+
+  if (!startDateStr || !endDateStr) {
+    showToast('Pick a start and end date first.', 'info');
+    return;
+  }
+  if (startDateStr > endDateStr) {
+    showToast('Start date must be on or before the end date.', 'error');
+    return;
+  }
+
+  exportRangeCsvBtn.disabled = true;
+  const originalLabel = exportRangeCsvBtn.textContent;
+  exportRangeCsvBtn.textContent = 'Exporting...';
+  rangeExportStatus.textContent = '';
+
+  try {
+    const rows = await fetchAttendanceRange(startDateStr, endDateStr);
+    if (!rows.length) {
+      showToast('No attendance records in that range.', 'info');
+      return;
+    }
+
+    const header = ['Employee', 'Email', 'Action', 'Local scanned at', 'Server received at', 'Offline sync', 'Status'];
+    const body = rows.map((r) => [
+      r.employee_name || '',
+      r.employee_email || '',
+      r.action,
+      formatDateTime(r.local_scanned_at),
+      formatDateTime(r.server_received_at),
+      r.queued_offline ? 'Yes' : 'No',
+      r.status,
+    ]);
+    const lines = [header, ...body].map((r) => r.map(escapeCsv).join(',')).join('\r\n');
+    const blob = new Blob(['\uFEFF' + lines], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `attendance-history-${startDateStr}_to_${endDateStr}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+
+    rangeExportStatus.textContent = `${rows.length} record(s) exported.`;
+    showToast(`Exported ${rows.length} record(s).`, 'success');
+  } catch (error) {
+    console.error(error);
+    showToast(error.message || 'Export failed.', 'error');
+  } finally {
+    exportRangeCsvBtn.disabled = false;
+    exportRangeCsvBtn.textContent = originalLabel;
+  }
 }
 
 async function refreshCurrentQr() {
@@ -729,6 +819,7 @@ dateFilter.addEventListener('change', async () => {
   await refreshRosterAndSummary(rows);
 });
 exportCsvBtn.addEventListener('click', exportDailyCsv);
+exportRangeCsvBtn.addEventListener('click', exportAttendanceRangeCsv);
 
 window.addEventListener('online', async () => {
   updateNetworkBadge();
@@ -760,6 +851,8 @@ supabase.auth.onAuthStateChange(async (event, session) => {
     if (profile.role === 'admin') {
       shiftInfo.textContent = shiftConfig().label;
       if (!dateFilter.value) dateFilter.value = toLocalDateStr(new Date());
+      if (!rangeStartInput.value) rangeStartInput.value = firstDayOfMonthStr();
+      if (!rangeEndInput.value) rangeEndInput.value = toLocalDateStr(new Date());
       startAdminListeners();
     } else {
       startEmployeeListeners(session.user.id);
