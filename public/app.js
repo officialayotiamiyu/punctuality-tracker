@@ -695,7 +695,7 @@ registerForm.addEventListener('submit', async (event) => {
   const { data, error } = await supabase.auth.signUp({
     email,
     password: registerPassword.value,
-    options: {emailRedirectTo: data: { full_name: registerName.value.trim() } },
+    options: { data: { full_name: registerName.value.trim() } },
   });
   if (error) {
     authStatus.textContent = error.message;
