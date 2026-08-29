@@ -1,7 +1,7 @@
 // Service worker — uses RELATIVE paths so it works on GitHub Pages
 // under https://<user>.github.io/<repo>/ subpaths as well as at the root.
 // Bump CACHE_NAME whenever you change the frontend so phones download the new version.
-const CACHE_NAME = 'attendance-pwa-v5';
+const CACHE_NAME = 'attendance-pwa-v6';
 const APP_SHELL = [
   './',
   './index.html',
@@ -12,7 +12,7 @@ const APP_SHELL = [
   './offline.html',
   './icons/icon-192.svg',
   './icons/icon-512.svg',
-  'https://cdn.jsdelivr.net/npm/qrcode@1/build/qrcode.min.js',
+  'https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js',
   'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js',
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js'
 ];
@@ -44,8 +44,10 @@ self.addEventListener('fetch', (event) => {
     caches.match(request).then((cached) => {
       if (cached) return cached;
       return fetch(request).then((response) => {
-        const clone = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+        if (response.ok) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+        }
         return response;
       }).catch(() => caches.match('./offline.html'));
     })
