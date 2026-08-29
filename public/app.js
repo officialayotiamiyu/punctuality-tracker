@@ -516,11 +516,15 @@ async function refreshCurrentQr() {
     ctx.clearRect(0, 0, qrCanvas.width, qrCanvas.height);
     return;
   }
-  currentQrText.textContent = qr.code;
+    currentQrText.textContent = qr.code;
   qrMeta.textContent = `Generated ${formatDateTime(qr.generatedAt)}`;
-  if (window.QRCode) {
-    QRCode.toCanvas(qrCanvas, qr.code, { width: 280, margin: 1, color: { dark: '#111827', light: '#ffffff' } });
+  if (!window.QRCode) {
+    console.error('QRCode library not loaded — check that the qrcode CDN script in index.html loaded successfully.');
+    qrMeta.textContent += ' (QR image library failed to load — see console)';
+    return;
   }
+  QRCode.toCanvas(qrCanvas, qr.code, { width: 280, margin: 1, color: { dark: '#111827', light: '#ffffff' } })
+    .catch((err) => console.error('QRCode.toCanvas failed:', err));
 }
 
 async function refreshAdminDashboard() {
