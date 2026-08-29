@@ -262,12 +262,17 @@ function renderRows(target, rows, admin = false) {
 // --- Realtime listeners ------------------------------------------------------
 
 async function refreshEmployeeAttendance(userId) {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('attendance')
     .select('*')
     .eq('employee_id', userId)
     .order('local_scanned_at', { ascending: false })
     .limit(50);
+  if (error) {
+    console.error('refreshEmployeeAttendance failed:', error);
+    employeeAttendanceBody.innerHTML = `<tr><td colspan="4" class="small">Could not load history: ${error.message}</td></tr>`;
+    return;
+  }
   renderRows(employeeAttendanceBody, data || [], false);
 }
 
